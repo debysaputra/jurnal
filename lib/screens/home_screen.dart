@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../models/companion.dart';
@@ -24,19 +26,32 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _storage = StorageService.instance;
+  Timer? _clock;
 
   @override
   void initState() {
     super.initState();
     _storage.addListener(_onChange);
+    WidgetsBinding.instance.addObserver(this);
+    // Segarkan greeting/data "hari ini" tiap menit agar selalu sesuai waktu.
+    _clock = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _clock?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _storage.removeListener(_onChange);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) setState(() {});
   }
 
   void _onChange() => setState(() {});
