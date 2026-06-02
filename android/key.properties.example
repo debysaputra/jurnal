@@ -1,0 +1,13 @@
+# Salin file ini menjadi `key.properties` (di folder yang sama) lalu isi
+# dengan informasi keystore Anda. JANGAN commit `key.properties` ke git.
+#
+# Contoh cara membuat keystore baru (jalankan di PowerShell / cmd):
+#   keytool -genkey -v -keystore D:\keys\myjurnal-upload.jks ^
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+# Setelah keystore dibuat, isi 4 baris di bawah ini di file key.properties.
+
+storePassword=PASSWORD_KEYSTORE_ANDA
+keyPassword=PASSWORD_KEY_ANDA
+keyAlias=upload
+storeFile=D:/keys/myjurnal-upload.jks

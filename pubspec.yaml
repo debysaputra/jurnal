@@ -1,0 +1,52 @@
+name: myjurnal
+description: "Aplikasi jurnal harian modern dengan mood tracker, todo list, dan reminder."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.4
+
+  # UI / Style
+  google_fonts: ^6.2.1
+  flutter_staggered_animations: ^1.1.1
+  fl_chart: ^0.69.0
+  table_calendar: ^3.1.2
+  flutter_slidable: ^3.1.1
+  shimmer: ^3.0.0
+
+  # Utils
+  intl: ^0.19.0
+  uuid: ^4.5.0
+  image_picker: ^1.1.2
+  flutter_local_notifications: ^17.2.3
+  timezone: ^0.9.4
+  shared_preferences: ^2.3.2
+  permission_handler: ^11.3.1
+
+  # Monetization
+  google_mobile_ads: ^8.0.0
+  flutter_gemma: ^0.13.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.13
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/images/characters/
+    - assets/images/characters/freya/
