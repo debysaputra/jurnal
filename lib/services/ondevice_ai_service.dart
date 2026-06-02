@@ -7,18 +7,18 @@ export '../models/companion.dart';
 /// penyimpanan app — TIDAK di-bundle, agar APK kecil & menghindari proses
 /// salin aset besar dari dalam APK yang rawan macet.
 ///
-/// Model: Qwen2.5 0.5B Instruct (Apache-2.0) — multibahasa, layak untuk
-/// asisten personal, ~520 MB.
+/// Model: Qwen2.5 1.5B Instruct (Apache-2.0) — lebih pintar/multibahasa, ~1.6 GB.
+/// CATATAN: berat untuk HP RAM 4 GB; berisiko force-close saat memuat.
 class OndeviceAiService {
   OndeviceAiService._();
   static final OndeviceAiService instance = OndeviceAiService._();
 
   static const modelUrl =
-      'https://huggingface.co/litert-community/Qwen2.5-0.5B-Instruct/resolve/main/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task';
+      'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task';
   static const modelFilename =
-      'Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task';
-  static const modelDisplayName = 'Qwen2.5 0.5B Instruct';
-  static const modelSizeLabel = '± 520 MB';
+      'Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task';
+  static const modelDisplayName = 'Qwen2.5 1.5B Instruct';
+  static const modelSizeLabel = '± 1.6 GB';
 
   InferenceModel? _model;
   InferenceChat? _chat;

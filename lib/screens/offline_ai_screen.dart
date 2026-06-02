@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import '../services/ai_context.dart';
-import '../services/ondevice_ai_service.dart';
+import '../services/gemini_service.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import 'companion_picker_screen.dart';
-
-enum _Phase { checking, needDownload, downloading, loading, ready, error }
 
 class _ChatMsg {
   final String text;
@@ -22,19 +20,33 @@ class OfflineAiScreen extends StatefulWidget {
 }
 
 class _OfflineAiScreenState extends State<OfflineAiScreen> {
-  final _ai = OndeviceAiService.instance;
   final _inputCtrl = TextEditingController();
+  final _keyCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
 
-  _Phase _phase = _Phase.checking;
-  String _error = '';
-  int _progress = 0;
   late Companion _companion =
       Companion.byId(StorageService.instance.selectedCompanionId);
   final _messages = <_ChatMsg>[];
   bool _generating = false;
   bool _negativeMood = false;
+  bool _hasKey = GeminiService.hasKey;
 
+  @override
+  void initState() {
+    super.initState();
+    if (_hasKey) _loadHistory();
+  }
+
+  @override
+  void dispose() {
+    _persist();
+    _inputCtrl.dispose();
+    _keyCtrl.dispose();
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  // ---------- Persona & emosi ----------
   bool _isNegative(String t) {
     final s = t.toLowerCase();
     return RegExp(
@@ -43,20 +55,34 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
     ).hasMatch(s);
   }
 
-  /// Bersihkan teks balasan: buang label emosi nyasar, ubah literal "\n"/"/n"
-  /// jadi baris baru, rapikan baris kosong berlebih.
-  String _sanitize(String raw) {
-    var t = raw.replaceAll(
-      RegExp(r'\[(senang|sedih|marah|netral|happy|sad|angry|neutral)\]',
-          caseSensitive: false),
-      '',
-    );
-    t = t.replaceAll(r'\n', '\n').replaceAll('/n', '\n');
-    t = t.replaceAll(RegExp(r'[ \t]+\n'), '\n');
-    t = t.replaceAll(RegExp(r'\n{3,}'), '\n\n');
-    return t.trimLeft();
+  String _buildSystemInstruction() {
+    return '${_companion.systemInstruction} '
+        'Lawan bicaramu bernama ${StorageService.instance.userName}. '
+        '${AiContext.build()} '
+        'Awali setiap balasan dengan satu label emosi dalam kurung siku sesuai '
+        'perasaanmu: [senang], [sedih], [marah], atau [netral]. '
+        'Contoh: "[senang] Hai!".';
   }
 
+  ({String text, bool negative, String? emotion}) _parseEmotion(String raw) {
+    final tagRe = RegExp(
+      r'\[(senang|sedih|marah|netral|happy|sad|angry|neutral)\]',
+      caseSensitive: false,
+    );
+    final first = tagRe.firstMatch(raw);
+    String? emotion;
+    var negative = _negativeMood;
+    if (first != null) {
+      emotion = first.group(1)!.toLowerCase();
+      negative = const ['sedih', 'marah', 'sad', 'angry'].contains(emotion);
+    }
+    var t = raw.replaceAll(tagRe, '');
+    t = t.replaceAll(r'\n', '\n').replaceAll('/n', '\n');
+    t = t.replaceAll(RegExp(r'[ \t]+\n'), '\n').replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    return (text: t.trim(), negative: negative, emotion: emotion);
+  }
+
+  // ---------- History ----------
   void _persist() {
     final msgs = _messages
         .where((m) => m.text.trim().isNotEmpty)
@@ -73,11 +99,51 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
     if (_messages.isEmpty) {
       _messages.add(_ChatMsg(
         'Hai, aku ${_companion.name} ${_companion.emoji} '
-        'Aku jalan sepenuhnya di HP-mu, jadi obrolan kita privat. '
-        'Ada yang ingin kamu ceritakan?',
+        'Ada yang ingin kamu ceritakan hari ini?',
         false,
       ));
     }
+  }
+
+  List<Map<String, String>> _historyForApi() {
+    // Kecualikan 2 pesan terakhir (pesan user baru + placeholder ketik).
+    final end = _messages.length - 2;
+    final out = <Map<String, String>>[];
+    for (var i = 0; i < end; i++) {
+      final m = _messages[i];
+      if (m.text.trim().isEmpty) continue;
+      out.add({'role': m.fromUser ? 'user' : 'model', 't': m.text, 'text': m.text});
+    }
+    // Gemini mulai dari giliran user.
+    while (out.isNotEmpty && out.first['role'] == 'model') {
+      out.removeAt(0);
+    }
+    return out;
+  }
+
+  // ---------- Aksi ----------
+  void _saveKey() {
+    final k = _keyCtrl.text.trim();
+    if (k.isEmpty) return;
+    StorageService.instance.geminiApiKey = k;
+    setState(() {
+      _hasKey = true;
+      _loadHistory();
+    });
+  }
+
+  Future<void> _changeCompanion() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const CompanionPickerScreen()),
+    );
+    final next = Companion.byId(StorageService.instance.selectedCompanionId);
+    if (!mounted || next.id == _companion.id) return;
+    _persist();
+    setState(() {
+      _companion = next;
+      _negativeMood = false;
+      if (_hasKey) _loadHistory();
+    });
   }
 
   Future<void> _clearChat() async {
@@ -106,107 +172,13 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
       _negativeMood = false;
       _loadHistory();
     });
-    // Reset sesi AI agar konteks ikut bersih.
-    if (_ai.isLoaded) {
-      await _ai.unload();
-      await _load();
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _check();
-  }
-
-  Future<void> _changeCompanion() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const CompanionPickerScreen()),
-    );
-    final next = Companion.byId(StorageService.instance.selectedCompanionId);
-    if (!mounted || next.id == _companion.id) return;
-    setState(() {
-      _companion = next;
-      _negativeMood = false;
-    });
-    if (_ai.isLoaded) {
-      await _ai.unload();
-      await _load(); // memuat ulang + restore history karakter ini
-    } else {
-      setState(_loadHistory);
-    }
-  }
-
-  @override
-  void dispose() {
-    _persist(); // simpan riwayat sebelum keluar
-    _inputCtrl.dispose();
-    _scrollCtrl.dispose();
-    _ai.unload();
-    super.dispose();
-  }
-
-  Future<void> _check() async {
-    setState(() => _phase = _Phase.checking);
-    try {
-      final installed = await _ai.isInstalled();
-      if (!mounted) return;
-      if (installed) {
-        await _load();
-      } else {
-        // Unduh manual: tampilkan tombol, biar user yang memulai.
-        setState(() => _phase = _Phase.needDownload);
-      }
-    } catch (e) {
-      _fail(e);
-    }
-  }
-
-  Future<void> _download() async {
-    setState(() {
-      _phase = _Phase.downloading;
-      _progress = 0;
-    });
-    try {
-      await _ai.download((p) {
-        if (mounted) setState(() => _progress = p);
-      });
-      if (!mounted) return;
-      await _load();
-    } catch (e) {
-      _fail(e);
-    }
-  }
-
-  Future<void> _load() async {
-    setState(() => _phase = _Phase.loading);
-    try {
-      final si = '${_companion.systemInstruction} '
-          'Lawan bicaramu bernama ${StorageService.instance.userName}. '
-          '${AiContext.build()}';
-      await _ai.load(systemInstruction: si);
-      if (!mounted) return;
-      setState(() {
-        _phase = _Phase.ready;
-        _loadHistory();
-      });
-    } catch (e) {
-      _fail(e);
-    }
-  }
-
-  void _fail(Object e) {
-    if (!mounted) return;
-    setState(() {
-      _phase = _Phase.error;
-      _error = e.toString();
-    });
   }
 
   Future<void> _send() async {
     final text = _inputCtrl.text.trim();
     if (text.isEmpty || _generating) return;
     _inputCtrl.clear();
+    final history = _historyForApi();
     setState(() {
       _negativeMood = _isNegative(text);
       _messages.add(_ChatMsg(text, true));
@@ -216,28 +188,24 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
     _persist();
     _scrollToBottom();
     try {
-      final buffer = StringBuffer();
-      await for (final token
-          in _ai.sendMessage(text, reminder: _companion.chatReminder)) {
-        buffer.write(token);
-        if (!mounted) return;
-        setState(() => _messages[_messages.length - 1] =
-            _ChatMsg(_sanitize(buffer.toString()), false));
-        _scrollToBottom();
-      }
-      final finalText = _sanitize(buffer.toString()).trim();
-      if (mounted) {
-        setState(() => _messages[_messages.length - 1] = _ChatMsg(
-              finalText.isEmpty
-                  ? 'Hmm, aku belum kepikiran jawabannya. Coba tanya lagi ya.'
-                  : finalText,
-              false,
-            ));
-      }
+      final reply = await GeminiService.instance.chat(
+        systemInstruction: _buildSystemInstruction(),
+        history: history,
+        message: text,
+      );
+      final parsed = _parseEmotion(reply);
+      if (!mounted) return;
+      setState(() {
+        if (parsed.emotion != null) _negativeMood = parsed.negative;
+        _messages[_messages.length - 1] = _ChatMsg(
+          parsed.text.isEmpty ? 'Maaf, aku belum bisa menjawab itu.' : parsed.text,
+          false,
+        );
+      });
     } catch (e) {
       if (mounted) {
         setState(() => _messages[_messages.length - 1] =
-            _ChatMsg('Terjadi kesalahan: $e', false));
+            _ChatMsg('Gagal terhubung ke Gemini: $e', false));
       }
     } finally {
       if (mounted) {
@@ -245,6 +213,7 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
         _persist();
       }
     }
+    _scrollToBottom();
   }
 
   void _scrollToBottom() {
@@ -276,7 +245,7 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
-                'OFFLINE',
+                'GEMINI',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 9,
@@ -293,7 +262,7 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
             tooltip: 'Ganti karakter',
             onPressed: _changeCompanion,
           ),
-          if (_phase == _Phase.ready)
+          if (_hasKey)
             IconButton(
               icon: const Icon(Icons.delete_outline_rounded),
               tooltip: 'Hapus percakapan',
@@ -303,71 +272,13 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
       ),
       body: GradientBackground(
         child: SafeArea(
-          child: switch (_phase) {
-            _Phase.checking => _centered(
-                const CircularProgressIndicator(),
-                'Memeriksa model…',
-              ),
-            _Phase.needDownload => _downloadPrompt(),
-            _Phase.downloading => _centered(
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 64,
-                      height: 64,
-                      child: CircularProgressIndicator(
-                        value: _progress > 0 ? _progress / 100 : null,
-                        strokeWidth: 6,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      '$_progress%',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-                'Mengunduh ${OndeviceAiService.modelDisplayName} '
-                '(${OndeviceAiService.modelSizeLabel})…\n'
-                'Disarankan pakai WiFi. Biarkan aplikasi terbuka.',
-              ),
-            _Phase.loading => _centered(
-                const CircularProgressIndicator(),
-                'Memuat AI ke memori…',
-              ),
-            _Phase.error => _errorView(),
-            _Phase.ready => _chatView(),
-          },
+          child: _hasKey ? _chatView() : _needKeyView(),
         ),
       ),
     );
   }
 
-  Widget _centered(Widget top, String text) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            top,
-            const SizedBox(height: 20),
-            Text(
-              text,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.inkSoft, height: 1.4),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _downloadPrompt() {
+  Widget _needKeyView() {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -376,96 +287,37 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('🤖', style: TextStyle(fontSize: 48)),
+              const Text('🔑', style: TextStyle(fontSize: 44)),
               const SizedBox(height: 12),
               const Text(
-                'Mode AI Offline',
+                'Hubungkan Gemini',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 8),
               const Text(
-                'Chat dengan AI yang berjalan sepenuhnya di HP-mu — tanpa '
-                'internet setelah model diunduh, dan jurnalmu tetap privat.',
+                'Chat ini memakai AI Gemini (online). Tempel API key Gemini-mu. '
+                'Key gratis dari aistudio.google.com/apikey. '
+                'Catatan: isi chat dikirim ke server Google.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.inkSoft, height: 1.4),
+                style: TextStyle(color: AppColors.inkSoft, height: 1.4, fontSize: 13),
               ),
               const SizedBox(height: 16),
-              _infoRow(Icons.smart_toy_rounded,
-                  'Model: ${OndeviceAiService.modelDisplayName}'),
-              _infoRow(Icons.download_rounded,
-                  'Sekali unduh ${OndeviceAiService.modelSizeLabel}'),
-              _infoRow(Icons.memory_rounded,
-                  'Disarankan HP dengan RAM 4 GB ke atas'),
-              _infoRow(Icons.wifi_off_rounded,
-                  'Setelah terunduh, bisa dipakai offline'),
-              const SizedBox(height: 20),
+              TextField(
+                controller: _keyCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  hintText: 'Tempel API key (AIza...)',
+                  prefixIcon: Icon(Icons.vpn_key_rounded),
+                ),
+              ),
+              const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _download,
-                  icon: const Icon(Icons.download_rounded),
-                  label: Text('Unduh model (${OndeviceAiService.modelSizeLabel})'),
+                  onPressed: _saveKey,
+                  icon: const Icon(Icons.check_rounded),
+                  label: const Text('Simpan & mulai'),
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _infoRow(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: AppColors.inkSoft),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 13, color: AppColors.inkSoft),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _errorView() {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: GlassCard(
-          tint: AppColors.pink,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('😕', style: TextStyle(fontSize: 40)),
-              const SizedBox(height: 10),
-              const Text(
-                'Gagal menyiapkan AI',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _error,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Model: ${OndeviceAiService.modelDisplayName} '
-                '(${OndeviceAiService.modelSizeLabel}). '
-                'Pastikan koneksi internet stabil & ruang penyimpanan cukup, '
-                'lalu coba lagi.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: AppColors.inkSoft),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _check,
-                child: const Text('Coba lagi'),
               ),
             ],
           ),
@@ -495,17 +347,13 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
                     errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),
                 ),
-                // Fade ke latar di bawah agar menyatu dengan chat.
                 DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       stops: const [0.45, 1.0],
-                      colors: [
-                        Colors.transparent,
-                        AppColors.surface,
-                      ],
+                      colors: [Colors.transparent, AppColors.surface],
                     ),
                   ),
                 ),
@@ -569,9 +417,7 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
           maxWidth: MediaQuery.of(context).size.width * 0.78,
         ),
         decoration: BoxDecoration(
-          color: isUser
-              ? AppColors.primary
-              : Colors.white.withValues(alpha: 0.08),
+          color: isUser ? AppColors.primary : Colors.white.withValues(alpha: 0.08),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(18),
             topRight: const Radius.circular(18),

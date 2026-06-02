@@ -21,11 +21,13 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _storage = StorageService.instance;
   late TextEditingController _nameCtrl;
+  late TextEditingController _keyCtrl;
 
   @override
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: _storage.userName);
+    _keyCtrl = TextEditingController(text: _storage.geminiApiKey);
     _storage.addListener(_onChange);
   }
 
@@ -33,6 +35,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _storage.removeListener(_onChange);
     _nameCtrl.dispose();
+    _keyCtrl.dispose();
     super.dispose();
   }
 
@@ -453,7 +456,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Row(
                       children: [
                         Text(
-                          'Mode AI Offline',
+                          'Chat AI (Gemini)',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
@@ -465,7 +468,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     SizedBox(height: 2),
                     Text(
-                      'Chat dengan AI di HP-mu, tanpa server',
+                      'Ngobrol dengan asisten pintar (online)',
                       style: TextStyle(color: AppColors.inkSoft, fontSize: 12),
                     ),
                   ],
@@ -473,6 +476,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const Icon(Icons.chevron_right_rounded,
                   color: AppColors.inkSoft),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'API key Gemini',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.inkSoft,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _keyCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  hintText: 'AIza... (dari aistudio.google.com/apikey)',
+                  prefixIcon: Icon(Icons.vpn_key_rounded),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    _storage.geminiApiKey = _keyCtrl.text.trim();
+                    FocusScope.of(context).unfocus();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(_keyCtrl.text.trim().isEmpty
+                            ? 'API key dihapus'
+                            : 'API key tersimpan ✨'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                  ),
+                  child: const Text('Simpan key'),
+                ),
+              ),
             ],
           ),
         ),

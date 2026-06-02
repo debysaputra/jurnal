@@ -36,6 +36,7 @@ dependencies:
   # Monetization
   google_mobile_ads: ^8.0.0
   flutter_gemma: ^0.13.6
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:
