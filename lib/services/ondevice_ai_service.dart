@@ -43,16 +43,17 @@ class OndeviceAiService {
         .fromNetwork(modelUrl)
         .install();
 
-    // maxTokens kecil = cache lebih kecil = lebih ringan di RAM (HP terbatas).
+    // Konteks 1024 memberi ruang cukup agar sesi tidak sering dibuat ulang
+    // (rebuild sesi sangat berat di HP ini → tampak "stuck"). 0.5B tetap muat.
     _model = await FlutterGemma.getActiveModel(
-      maxTokens: 512,
+      maxTokens: 1024,
       preferredBackend: PreferredBackend.cpu,
     );
     _chat = await _model!.createChat(
       temperature: 0.8,
       topK: 40,
       topP: 0.95,
-      tokenBuffer: 128,
+      tokenBuffer: 256,
       modelType: ModelType.qwen,
       systemInstruction: systemInstruction,
     );

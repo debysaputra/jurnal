@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/ai_context.dart';
 import '../services/ondevice_ai_service.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
@@ -42,21 +43,74 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
     ).hasMatch(s);
   }
 
-  /// Pisahkan label emosi `[senang]/[sedih]/...` di awal balasan AI dari teksnya.
-  /// `emotion` null bila label belum lengkap/ada; `text` sudah tanpa label.
-  ({String text, bool negative, String? emotion}) _parseEmotion(String raw) {
-    final m = RegExp(
-      r'^\s*\[(senang|sedih|marah|netral|happy|sad|angry|neutral)\]\s*',
-      caseSensitive: false,
-    ).firstMatch(raw);
-    if (m != null) {
-      final e = m.group(1)!.toLowerCase();
-      final neg = e == 'sedih' || e == 'marah' || e == 'sad' || e == 'angry';
-      return (text: raw.substring(m.end), negative: neg, emotion: e);
+  /// Bersihkan teks balasan: buang label emosi nyasar, ubah literal "\n"/"/n"
+  /// jadi baris baru, rapikan baris kosong berlebih.
+  String _sanitize(String raw) {
+    var t = raw.replaceAll(
+      RegExp(r'\[(senang|sedih|marah|netral|happy|sad|angry|neutral)\]',
+          caseSensitive: false),
+      '',
+    );
+    t = t.replaceAll(r'\n', '\n').replaceAll('/n', '\n');
+    t = t.replaceAll(RegExp(r'[ \t]+\n'), '\n');
+    t = t.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    return t.trimLeft();
+  }
+
+  void _persist() {
+    final msgs = _messages
+        .where((m) => m.text.trim().isNotEmpty)
+        .map((m) => {'u': m.fromUser, 't': m.text})
+        .toList();
+    StorageService.instance.saveChatHistory(_companion.id, msgs);
+  }
+
+  void _loadHistory() {
+    final saved = StorageService.instance.chatHistory(_companion.id);
+    _messages
+      ..clear()
+      ..addAll(saved.map((m) => _ChatMsg(m['t'] as String, m['u'] as bool)));
+    if (_messages.isEmpty) {
+      _messages.add(_ChatMsg(
+        'Hai, aku ${_companion.name} ${_companion.emoji} '
+        'Aku jalan sepenuhnya di HP-mu, jadi obrolan kita privat. '
+        'Ada yang ingin kamu ceritakan?',
+        false,
+      ));
     }
-    // Label mungkin masih separuh terkirim ("[sen") → sembunyikan dulu.
-    final partial = RegExp(r'^\s*\[[^\]]*$').hasMatch(raw);
-    return (text: partial ? '' : raw, negative: _negativeMood, emotion: null);
+  }
+
+  Future<void> _clearChat() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Hapus percakapan?'),
+        content: Text('Riwayat chat dengan ${_companion.name} akan dihapus.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await StorageService.instance.clearChatHistory(_companion.id);
+    if (!mounted) return;
+    setState(() {
+      _negativeMood = false;
+      _loadHistory();
+    });
+    // Reset sesi AI agar konteks ikut bersih.
+    if (_ai.isLoaded) {
+      await _ai.unload();
+      await _load();
+    }
   }
 
   @override
@@ -73,16 +127,19 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
     if (!mounted || next.id == _companion.id) return;
     setState(() {
       _companion = next;
-      _messages.clear();
+      _negativeMood = false;
     });
     if (_ai.isLoaded) {
       await _ai.unload();
-      await _load();
+      await _load(); // memuat ulang + restore history karakter ini
+    } else {
+      setState(_loadHistory);
     }
   }
 
   @override
   void dispose() {
+    _persist(); // simpan riwayat sebelum keluar
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     _ai.unload();
@@ -125,19 +182,13 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
     setState(() => _phase = _Phase.loading);
     try {
       final si = '${_companion.systemInstruction} '
-          'Lawan bicaramu bernama ${StorageService.instance.userName}.';
+          'Lawan bicaramu bernama ${StorageService.instance.userName}. '
+          '${AiContext.build()}';
       await _ai.load(systemInstruction: si);
       if (!mounted) return;
       setState(() {
         _phase = _Phase.ready;
-        if (_messages.isEmpty) {
-          _messages.add(_ChatMsg(
-            'Hai, aku ${_companion.name} ${_companion.emoji} '
-            'Aku jalan sepenuhnya di HP-mu, jadi obrolan kita privat. '
-            'Ada yang ingin kamu ceritakan?',
-            false,
-          ));
-        }
+        _loadHistory();
       });
     } catch (e) {
       _fail(e);
@@ -162,6 +213,7 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
       _messages.add(_ChatMsg('', false));
       _generating = true;
     });
+    _persist();
     _scrollToBottom();
     try {
       final buffer = StringBuffer();
@@ -169,18 +221,18 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
           in _ai.sendMessage(text, reminder: _companion.chatReminder)) {
         buffer.write(token);
         if (!mounted) return;
-        final parsed = _parseEmotion(buffer.toString());
-        setState(() {
-          // Ekspresi gambar mengikuti emosi balasan AI.
-          if (parsed.emotion != null) _negativeMood = parsed.negative;
-          _messages[_messages.length - 1] = _ChatMsg(parsed.text, false);
-        });
+        setState(() => _messages[_messages.length - 1] =
+            _ChatMsg(_sanitize(buffer.toString()), false));
         _scrollToBottom();
       }
-      final finalText = _parseEmotion(buffer.toString()).text.trim();
-      if (finalText.isEmpty && mounted) {
-        setState(() => _messages[_messages.length - 1] =
-            _ChatMsg('(maaf, aku belum punya jawaban)', false));
+      final finalText = _sanitize(buffer.toString()).trim();
+      if (mounted) {
+        setState(() => _messages[_messages.length - 1] = _ChatMsg(
+              finalText.isEmpty
+                  ? 'Hmm, aku belum kepikiran jawabannya. Coba tanya lagi ya.'
+                  : finalText,
+              false,
+            ));
       }
     } catch (e) {
       if (mounted) {
@@ -188,7 +240,10 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
             _ChatMsg('Terjadi kesalahan: $e', false));
       }
     } finally {
-      if (mounted) setState(() => _generating = false);
+      if (mounted) {
+        setState(() => _generating = false);
+        _persist();
+      }
     }
   }
 
@@ -238,6 +293,12 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
             tooltip: 'Ganti karakter',
             onPressed: _changeCompanion,
           ),
+          if (_phase == _Phase.ready)
+            IconButton(
+              icon: const Icon(Icons.delete_outline_rounded),
+              tooltip: 'Hapus percakapan',
+              onPressed: _clearChat,
+            ),
         ],
       ),
       body: GradientBackground(
@@ -419,7 +480,7 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
       children: [
         if (portrait != null)
           SizedBox(
-            height: 210,
+            height: 320,
             width: double.infinity,
             child: Stack(
               fit: StackFit.expand,

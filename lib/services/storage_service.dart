@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/journal_entry.dart';
@@ -172,6 +173,28 @@ class StorageService extends ChangeNotifier {
   set selectedCompanionId(String v) {
     _prefs.put('companion_id', v);
     notifyListeners();
+  }
+
+  // ---------- Riwayat chat (per karakter) ----------
+  /// Daftar pesan {'u': bool fromUser, 't': String text}.
+  List<Map<String, dynamic>> chatHistory(String companionId) {
+    final raw = _prefs.get('chat_$companionId');
+    if (raw is String && raw.isNotEmpty) {
+      try {
+        final list = jsonDecode(raw) as List;
+        return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
+      } catch (_) {}
+    }
+    return [];
+  }
+
+  Future<void> saveChatHistory(
+      String companionId, List<Map<String, dynamic>> messages) async {
+    await _prefs.put('chat_$companionId', jsonEncode(messages));
+  }
+
+  Future<void> clearChatHistory(String companionId) async {
+    await _prefs.delete('chat_$companionId');
   }
 
   String? get avatarPath {

@@ -50,8 +50,7 @@ class Companion {
   /// tetap memegang karakter (system instruction saja sering "lupa").
   String get chatReminder =>
       '(Ingat: kamu $name, $role. Jawab dalam Bahasa Indonesia, singkat, dan '
-      'tetap dalam karakter. Awali balasan dengan label emosimu: '
-      '[senang], [sedih], [marah], atau [netral].)';
+      'tetap dalam karakter.)';
 
   static const all = [aira, naya, orion, luna, atlas, freya];
 
@@ -62,9 +61,6 @@ class Companion {
       'Selalu menjawab dalam Bahasa Indonesia, singkat (2–4 kalimat), dan '
       'TETAP dalam karakter. Jangan pernah mengaku sebagai AI, model, asisten '
       'virtual, atau program — kamu benar-benar tokoh tersebut. '
-      'Awali SETIAP balasan dengan satu label emosi dalam kurung siku sesuai '
-      'perasaanmu: [senang], [sedih], [marah], atau [netral]. '
-      'Contoh: "[senang] Hai, apa kabar?". '
       'Kamu bukan terapis; untuk topik berat (menyakiti diri, dsb.) tanggapi '
       'dengan empati dan sarankan bantuan profesional.';
 
