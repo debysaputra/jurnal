@@ -5,7 +5,7 @@ import '../widgets/ad_banner.dart';
 import '../widgets/glass_card.dart';
 import 'home_screen.dart';
 import 'journal_list_screen.dart';
-import 'stats_screen.dart';
+import 'todo_screen.dart';
 import 'settings_screen.dart';
 import 'journal_edit_screen.dart';
 import 'offline_ai_screen.dart';
@@ -40,7 +40,7 @@ class _RootScreenState extends State<RootScreen>
     HomeScreen(),
     JournalListScreen(),
     SizedBox.shrink(),
-    StatsScreen(),
+    TodoScreen(),
     SettingsScreen(),
   ];
 
@@ -50,7 +50,7 @@ class _RootScreenState extends State<RootScreen>
     _NavItem(Icons.home_rounded, 'Beranda'),
     _NavItem(Icons.menu_book_rounded, 'Jurnal'),
     _NavItem(Icons.chat_bubble_rounded, 'Chat'),
-    _NavItem(Icons.insights_rounded, 'Stats'),
+    _NavItem(Icons.checklist_rounded, 'To-Do'),
     _NavItem(Icons.person_rounded, 'Profil'),
   ];
 

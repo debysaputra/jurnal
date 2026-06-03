@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../models/companion.dart';
 import '../models/mood.dart';
-import '../models/todo_item.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/dates.dart';
@@ -17,7 +16,7 @@ import 'companion_picker_screen.dart';
 import 'journal_edit_screen.dart';
 import 'offline_ai_screen.dart';
 import 'root_screen.dart';
-import 'todo_screen.dart';
+import 'stats_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -65,9 +64,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final todosToday = _storage.todosOn(now);
     final doneTodos = todosToday.where((t) => t.done).length;
     final quote = dailyQuotes[now.day % dailyQuotes.length];
-    final lastMood = _storage.allJournals.isEmpty
+    final allJournals = _storage.allJournals;
+    final lastMood = allJournals.isEmpty
         ? null
-        : Mood.values[_storage.allJournals.first.moodIndex];
+        : Mood.values[allJournals.first.moodIndex];
+
+    // Mood dominan untuk ringkasan statistik di beranda.
+    final moodCount = <Mood, int>{for (final m in Mood.values) m: 0};
+    for (final j in allJournals) {
+      final m = Mood.values[j.moodIndex];
+      moodCount[m] = moodCount[m]! + 1;
+    }
+    Mood? domMood;
+    var domCount = 0;
+    moodCount.forEach((m, c) {
+      if (c > domCount) {
+        domCount = c;
+        domMood = m;
+      }
+    });
+    final domPct = allJournals.isEmpty ? 0.0 : domCount / allJournals.length;
 
     return AnimationLimiter(
       child: ListView(
@@ -215,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     label: 'To-Do\nselesai',
                     value: '$doneTodos/${todosToday.length}',
                     tint: AppColors.mint,
-                    onTap: _openTodo,
+                    onTap: () => RootScreen.of(context)?.goTo(3),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -342,7 +358,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'To-Do hari ini',
+                  'Statistik',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
@@ -350,7 +366,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                 ),
                 GestureDetector(
-                  onTap: _openTodo,
+                  onTap: _openStats,
                   child: const Row(
                     children: [
                       Text(
@@ -370,48 +386,70 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
             const SizedBox(height: 12),
             GlassCard(
-              tint: AppColors.mint,
-              child: Column(
+              tint: AppColors.lavender,
+              onTap: _openStats,
+              child: Row(
                 children: [
-                  if (todosToday.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Text(
-                        'Belum ada tugas hari ini.',
-                        style: TextStyle(
-                          color: AppColors.inkSoft,
-                          fontSize: 13,
-                        ),
-                      ),
-                    )
-                  else
-                    ...todosToday.take(4).map(
-                          (t) => _TodoRow(
-                            item: t,
-                            onToggle: () => _storage.toggleTodo(t.id),
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: (domMood?.color ?? AppColors.inkSoft)
+                          .withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      domMood?.emoji ?? '🫥',
+                      style: const TextStyle(fontSize: 26),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'MOOD TERBANYAK',
+                          style: TextStyle(
+                            fontSize: 11,
+                            letterSpacing: 1,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.inkSoft,
                           ),
                         ),
-                  const SizedBox(height: 4),
-                  GestureDetector(
-                    onTap: _openTodo,
-                    behavior: HitTestBehavior.opaque,
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        children: [
-                          Icon(Icons.add_circle_outline_rounded,
-                              size: 20, color: AppColors.ink),
-                          SizedBox(width: 8),
-                          Text(
-                            'Tambah tugas',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                              color: AppColors.ink,
-                            ),
+                        const SizedBox(height: 2),
+                        Text(
+                          domMood?.label ?? 'Belum ada data',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    width: 52,
+                    height: 52,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        CircularProgressIndicator(
+                          value: domPct,
+                          strokeWidth: 6,
+                          backgroundColor: Colors.white.withValues(alpha: 0.12),
+                          valueColor:
+                              const AlwaysStoppedAnimation(AppColors.primary),
+                        ),
+                        Text(
+                          '${(domPct * 100).round()}%',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -531,7 +569,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _openTodo() {
+  void _openStats() {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => Scaffold(
@@ -539,7 +577,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           extendBodyBehindAppBar: true,
           appBar: AppBar(backgroundColor: Colors.transparent),
           body: const GradientBackground(
-            child: SafeArea(child: TodoScreen()),
+            child: SafeArea(child: StatsScreen()),
           ),
         ),
       ),
@@ -612,60 +650,6 @@ class _MiniStat extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _TodoRow extends StatelessWidget {
-  final TodoItem item;
-  final VoidCallback onToggle;
-  const _TodoRow({required this.item, required this.onToggle});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onToggle,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 7),
-        child: Row(
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: item.done ? AppColors.primary : Colors.transparent,
-                borderRadius: BorderRadius.circular(7),
-                border: Border.all(
-                  color: item.done ? AppColors.primary : AppColors.inkSoft,
-                  width: 1.5,
-                ),
-              ),
-              child: item.done
-                  ? const Icon(Icons.check_rounded,
-                      color: Colors.white, size: 16)
-                  : null,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                item.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: item.done ? AppColors.inkSoft : AppColors.ink,
-                  decoration: item.done
-                      ? TextDecoration.lineThrough
-                      : TextDecoration.none,
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
