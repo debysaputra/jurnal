@@ -175,14 +175,6 @@ class StorageService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ---------- AI Cloud (Gemini) ----------
-  String get geminiApiKey =>
-      _prefs.get('gemini_key', defaultValue: '') as String;
-  set geminiApiKey(String v) {
-    _prefs.put('gemini_key', v.trim());
-    notifyListeners();
-  }
-
   // ---------- Riwayat chat (per karakter) ----------
   /// Daftar pesan {'u': bool fromUser, 't': String text}.
   List<Map<String, dynamic>> chatHistory(String companionId) {

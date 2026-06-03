@@ -21,7 +21,6 @@ class OfflineAiScreen extends StatefulWidget {
 
 class _OfflineAiScreenState extends State<OfflineAiScreen> {
   final _inputCtrl = TextEditingController();
-  final _keyCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
 
   late Companion _companion =
@@ -29,19 +28,17 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
   final _messages = <_ChatMsg>[];
   bool _generating = false;
   bool _negativeMood = false;
-  bool _hasKey = GeminiService.hasKey;
 
   @override
   void initState() {
     super.initState();
-    if (_hasKey) _loadHistory();
+    _loadHistory();
   }
 
   @override
   void dispose() {
     _persist();
     _inputCtrl.dispose();
-    _keyCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
   }
@@ -122,16 +119,6 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
   }
 
   // ---------- Aksi ----------
-  void _saveKey() {
-    final k = _keyCtrl.text.trim();
-    if (k.isEmpty) return;
-    StorageService.instance.geminiApiKey = k;
-    setState(() {
-      _hasKey = true;
-      _loadHistory();
-    });
-  }
-
   Future<void> _changeCompanion() async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const CompanionPickerScreen()),
@@ -142,7 +129,7 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
     setState(() {
       _companion = next;
       _negativeMood = false;
-      if (_hasKey) _loadHistory();
+      _loadHistory();
     });
   }
 
@@ -262,65 +249,16 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
             tooltip: 'Ganti karakter',
             onPressed: _changeCompanion,
           ),
-          if (_hasKey)
-            IconButton(
-              icon: const Icon(Icons.delete_outline_rounded),
-              tooltip: 'Hapus percakapan',
-              onPressed: _clearChat,
-            ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded),
+            tooltip: 'Hapus percakapan',
+            onPressed: _clearChat,
+          ),
         ],
       ),
       body: GradientBackground(
         child: SafeArea(
-          child: _hasKey ? _chatView() : _needKeyView(),
-        ),
-      ),
-    );
-  }
-
-  Widget _needKeyView() {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: GlassCard(
-          padding: const EdgeInsets.all(22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('🔑', style: TextStyle(fontSize: 44)),
-              const SizedBox(height: 12),
-              const Text(
-                'Hubungkan Gemini',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Chat ini memakai AI Gemini (online). Tempel API key Gemini-mu. '
-                'Key gratis dari aistudio.google.com/apikey. '
-                'Catatan: isi chat dikirim ke server Google.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.inkSoft, height: 1.4, fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _keyCtrl,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  hintText: 'Tempel API key (AIza...)',
-                  prefixIcon: Icon(Icons.vpn_key_rounded),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _saveKey,
-                  icon: const Icon(Icons.check_rounded),
-                  label: const Text('Simpan & mulai'),
-                ),
-              ),
-            ],
-          ),
+          child: _chatView(),
         ),
       ),
     );

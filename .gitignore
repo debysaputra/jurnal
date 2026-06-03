@@ -44,6 +44,13 @@ app.*.map.json
 .env.*
 !.env.example
 
+# Firebase config (berisi apiKey publik; regenerate dgn `flutterfire configure`)
+# Tidak di-commit agar tidak memicu secret scanner GitHub.
+**/google-services.json
+lib/firebase_options.dart
+firebase.json
+.firebaserc
+
 # Android signing - JANGAN commit
 android/key.properties
 **/*.jks

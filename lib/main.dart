@@ -1,9 +1,10 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'firebase_options.dart';
 import 'screens/root_screen.dart';
 import 'services/ads_service.dart';
 import 'services/notification_service.dart';
@@ -12,10 +13,10 @@ import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Muat .env (berisi GEMINI_API_KEY). Aman bila file tak ada.
-  try {
-    await dotenv.load(fileName: '.env');
-  } catch (_) {}
+  // Inisialisasi Firebase (dipakai oleh Firebase AI Logic untuk chat AI).
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   await initializeDateFormatting('id_ID', null);
   await StorageService.instance.init();
   await NotificationService.instance.init();
