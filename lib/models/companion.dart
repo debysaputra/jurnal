@@ -21,6 +21,11 @@ class Companion {
   /// Ekspresi alternatif (mis. kesal/sedih) untuk mood negatif (opsional).
   final String? altAsset;
 
+  /// Peta ekspresi → path aset untuk portrait header chat. Kunci yang dikenali:
+  /// 'senang','sedih','marah','netral','thinking' (juga 'excited' opsional).
+  /// Bila null, portrait jatuh ke [portraitAsset]/[altAsset] (mode biner).
+  final Map<String, String>? expressions;
+
   final String systemInstruction;
 
   const Companion({
@@ -34,6 +39,7 @@ class Companion {
     String? imageAsset,
     this.portraitAsset,
     this.altAsset,
+    this.expressions,
   }) : imageAsset = imageAsset ?? 'assets/images/characters/$id.png';
 
   /// Aset avatar sesuai konteks: ekspresi alternatif bila [negative] & tersedia.
@@ -43,6 +49,36 @@ class Companion {
   /// Portrait (header chat) sesuai ekspresi; alt bila [negative] & tersedia.
   String? portraitFor({bool negative = false}) =>
       (negative && altAsset != null) ? altAsset : portraitAsset;
+
+  /// Portrait header chat sesuai [emotion] (label dari AI). [thinking] dipakai
+  /// saat AI sedang mengetik. Memakai [expressions] bila tersedia, jika tidak
+  /// jatuh ke mode biner [portraitFor].
+  String? portraitForEmotion(String? emotion, {bool thinking = false}) {
+    final ex = expressions;
+    if (ex == null) {
+      const neg = {'sedih', 'marah', 'sad', 'angry'};
+      return portraitFor(negative: emotion != null && neg.contains(emotion));
+    }
+    if (thinking && ex['thinking'] != null) return ex['thinking'];
+    final key = emotion == null ? null : _canonicalEmotion(emotion);
+    if (key != null && ex[key] != null) return ex[key];
+    return ex['netral'] ?? portraitAsset;
+  }
+
+  static String _canonicalEmotion(String e) {
+    switch (e.toLowerCase()) {
+      case 'happy':
+        return 'senang';
+      case 'sad':
+        return 'sedih';
+      case 'angry':
+        return 'marah';
+      case 'neutral':
+        return 'netral';
+      default:
+        return e.toLowerCase();
+    }
+  }
 
   bool get hasPortrait => portraitAsset != null;
 
@@ -71,9 +107,17 @@ class Companion {
     role: 'Teman Ceria',
     description: 'Ceria dan jujur—senyumnya menular, tapi jangan bikin dia kesal ya.',
     accent: AppColors.pink,
-    imageAsset: 'assets/images/characters/freya/happy.png',
-    portraitAsset: 'assets/images/characters/freya/happy.png',
-    altAsset: 'assets/images/characters/freya/mad.png',
+    imageAsset: 'assets/images/characters/freya/smile.png',
+    portraitAsset: 'assets/images/characters/freya/smile.png',
+    altAsset: 'assets/images/characters/freya/sad.png',
+    expressions: {
+      'senang': 'assets/images/characters/freya/smile.png',
+      'sedih': 'assets/images/characters/freya/sad.png',
+      'marah': 'assets/images/characters/freya/angry.png',
+      'netral': 'assets/images/characters/freya/neutral.png',
+      'excited': 'assets/images/characters/freya/exited.png',
+      'thinking': 'assets/images/characters/freya/thinking.png',
+    },
     systemInstruction:
         'Kamu adalah Freya, teman yang ceria, jujur, dan ekspresif di aplikasi '
         'jurnal MyJurnal. Hangat dan menyemangati, sesekali usil. $_safety',

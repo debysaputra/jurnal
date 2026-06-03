@@ -28,6 +28,7 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
   final _messages = <_ChatMsg>[];
   bool _generating = false;
   bool _negativeMood = false;
+  String? _emotion;
 
   @override
   void initState() {
@@ -129,6 +130,7 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
     setState(() {
       _companion = next;
       _negativeMood = false;
+      _emotion = null;
       _loadHistory();
     });
   }
@@ -157,6 +159,7 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
     if (!mounted) return;
     setState(() {
       _negativeMood = false;
+      _emotion = null;
       _loadHistory();
     });
   }
@@ -183,7 +186,10 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
       final parsed = _parseEmotion(reply);
       if (!mounted) return;
       setState(() {
-        if (parsed.emotion != null) _negativeMood = parsed.negative;
+        if (parsed.emotion != null) {
+          _negativeMood = parsed.negative;
+          _emotion = parsed.emotion;
+        }
         _messages[_messages.length - 1] = _ChatMsg(
           parsed.text.isEmpty ? 'Maaf, aku belum bisa menjawab itu.' : parsed.text,
           false,
@@ -265,7 +271,8 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
   }
 
   Widget _chatView() {
-    final portrait = _companion.portraitFor(negative: _negativeMood);
+    final portrait =
+        _companion.portraitForEmotion(_emotion, thinking: _generating);
     return Column(
       children: [
         if (portrait != null)
