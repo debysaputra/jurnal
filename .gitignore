@@ -39,6 +39,11 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Rahasia / API key - JANGAN commit
+.env
+.env.*
+!.env.example
+
 # Android signing - JANGAN commit
 android/key.properties
 **/*.jks

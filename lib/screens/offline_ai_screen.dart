@@ -205,7 +205,7 @@ class _OfflineAiScreenState extends State<OfflineAiScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _messages[_messages.length - 1] =
-            _ChatMsg('Gagal terhubung ke Gemini: $e', false));
+            _ChatMsg('Maaf, aku belum bisa menjawab itu.', false));
       }
     } finally {
       if (mounted) {

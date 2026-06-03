@@ -35,8 +35,10 @@ dependencies:
 
   # Monetization
   google_mobile_ads: ^8.0.0
-  flutter_gemma: ^0.13.6
+
+  # AI Cloud
   http: ^1.6.0
+  flutter_dotenv: ^6.0.1
 
 dev_dependencies:
   flutter_test:
@@ -48,6 +50,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
+    - .env
     - assets/images/
     - assets/images/characters/
     - assets/images/characters/freya/

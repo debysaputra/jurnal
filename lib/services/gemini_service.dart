@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'storage_service.dart';
 export '../models/companion.dart';
@@ -15,7 +16,22 @@ class GeminiService {
   static const model = 'gemini-2.5-flash';
   static const modelDisplayName = 'Gemini 2.5 Flash';
 
-  static String get _key => StorageService.instance.geminiApiKey;
+  /// Key bawaan dari .env (atau --dart-define saat build sebagai cadangan).
+  static const _defineKey = String.fromEnvironment('GEMINI_API_KEY');
+  static String get _embeddedKey {
+    try {
+      final fromEnv = dotenv.maybeGet('GEMINI_API_KEY') ?? '';
+      if (fromEnv.isNotEmpty) return fromEnv;
+    } catch (_) {}
+    return _defineKey;
+  }
+
+  /// Pakai key yang diisi user; bila kosong, pakai key bawaan (.env).
+  static String get _key {
+    final stored = StorageService.instance.geminiApiKey;
+    return stored.isNotEmpty ? stored : _embeddedKey;
+  }
+
   static bool get hasKey => _key.isNotEmpty;
 
   /// Kirim percakapan ke Gemini, kembalikan teks balasan.

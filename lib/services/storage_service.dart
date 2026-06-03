@@ -169,7 +169,7 @@ class StorageService extends ChangeNotifier {
   }
 
   String get selectedCompanionId =>
-      _prefs.get('companion_id', defaultValue: 'aira') as String;
+      _prefs.get('companion_id', defaultValue: 'freya') as String;
   set selectedCompanionId(String v) {
     _prefs.put('companion_id', v);
     notifyListeners();
